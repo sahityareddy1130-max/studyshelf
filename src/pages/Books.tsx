@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import BookCard from "@/components/BookCard";
@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, SlidersHorizontal, X } from "lucide-react";
+import { searchSchema } from "@/lib/validation";
 
 const allBooks = [
   {
@@ -97,13 +98,30 @@ const Books = () => {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 200]);
 
-  const filteredBooks = allBooks.filter((book) => {
-    const matchesSearch = book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         book.author.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "All" || book.category === selectedCategory;
-    const matchesPrice = book.price >= priceRange[0] && book.price <= priceRange[1];
-    return matchesSearch && matchesCategory && matchesPrice;
-  });
+  // Sanitize search query using zod schema
+  const sanitizedQuery = useMemo(() => {
+    const result = searchSchema.safeParse({ query: searchQuery });
+    return result.success ? result.data.query : "";
+  }, [searchQuery]);
+
+  const filteredBooks = useMemo(() => {
+    return allBooks.filter((book) => {
+      const query = sanitizedQuery.toLowerCase();
+      const matchesSearch = book.title.toLowerCase().includes(query) ||
+                           book.author.toLowerCase().includes(query);
+      const matchesCategory = selectedCategory === "All" || book.category === selectedCategory;
+      const matchesPrice = book.price >= priceRange[0] && book.price <= priceRange[1];
+      return matchesSearch && matchesCategory && matchesPrice;
+    });
+  }, [sanitizedQuery, selectedCategory, priceRange]);
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Limit input length
+    if (value.length <= 200) {
+      setSearchQuery(value);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -130,8 +148,9 @@ const Books = () => {
                   type="text"
                   placeholder="Search by title, author, or keyword..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={handleSearchChange}
                   className="pl-10"
+                  maxLength={200}
                 />
               </div>
               <Button variant="outline" className="md:w-auto">

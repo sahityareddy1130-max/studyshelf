@@ -7,23 +7,42 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BookOpen, Mail, Lock, User, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
+import { loginSchema, signupSchema, type LoginFormData, type SignupFormData } from "@/lib/validation";
 
 const Auth = () => {
   const [isLoading, setIsLoading] = useState(false);
   
-  const [loginData, setLoginData] = useState({ email: "", password: "" });
-  const [signupData, setSignupData] = useState({
+  const [loginData, setLoginData] = useState<LoginFormData>({ email: "", password: "" });
+  const [loginErrors, setLoginErrors] = useState<Partial<Record<keyof LoginFormData, string>>>({});
+  
+  const [signupData, setSignupData] = useState<SignupFormData & { confirmPassword: string }>({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
   });
+  const [signupErrors, setSignupErrors] = useState<Partial<Record<keyof SignupFormData | "confirmPassword", string>>>({});
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setLoginErrors({});
+    
+    // Validate with zod
+    const result = loginSchema.safeParse(loginData);
+    
+    if (!result.success) {
+      const errors: Partial<Record<keyof LoginFormData, string>> = {};
+      result.error.errors.forEach((err) => {
+        const field = err.path[0] as keyof LoginFormData;
+        errors[field] = err.message;
+      });
+      setLoginErrors(errors);
+      return;
+    }
+    
     setIsLoading(true);
     
-    // Simulate login
+    // Simulate login (would be replaced with actual auth)
     setTimeout(() => {
       toast.success("Login successful! Welcome back.");
       setIsLoading(false);
@@ -32,15 +51,24 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSignupErrors({});
     
-    if (signupData.password !== signupData.confirmPassword) {
-      toast.error("Passwords don't match");
+    // Validate with zod
+    const result = signupSchema.safeParse(signupData);
+    
+    if (!result.success) {
+      const errors: Partial<Record<keyof SignupFormData | "confirmPassword", string>> = {};
+      result.error.errors.forEach((err) => {
+        const field = err.path[0] as keyof SignupFormData | "confirmPassword";
+        errors[field] = err.message;
+      });
+      setSignupErrors(errors);
       return;
     }
     
     setIsLoading(true);
     
-    // Simulate signup
+    // Simulate signup (would be replaced with actual auth)
     setTimeout(() => {
       toast.success("Account created successfully! Welcome to StudyShelf.");
       setIsLoading(false);
@@ -99,12 +127,15 @@ const Auth = () => {
                         id="login-email"
                         type="email"
                         placeholder="you@example.com"
-                        className="pl-10"
+                        className={`pl-10 ${loginErrors.email ? "border-destructive" : ""}`}
                         value={loginData.email}
                         onChange={(e) => setLoginData({ ...loginData, email: e.target.value })}
-                        required
+                        maxLength={255}
                       />
                     </div>
+                    {loginErrors.email && (
+                      <p className="text-sm text-destructive">{loginErrors.email}</p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -120,12 +151,15 @@ const Auth = () => {
                         id="login-password"
                         type="password"
                         placeholder="••••••••"
-                        className="pl-10"
+                        className={`pl-10 ${loginErrors.password ? "border-destructive" : ""}`}
                         value={loginData.password}
                         onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
-                        required
+                        maxLength={128}
                       />
                     </div>
+                    {loginErrors.password && (
+                      <p className="text-sm text-destructive">{loginErrors.password}</p>
+                    )}
                   </div>
                   
                   <Button
@@ -156,12 +190,15 @@ const Auth = () => {
                         id="signup-name"
                         type="text"
                         placeholder="John Doe"
-                        className="pl-10"
+                        className={`pl-10 ${signupErrors.name ? "border-destructive" : ""}`}
                         value={signupData.name}
                         onChange={(e) => setSignupData({ ...signupData, name: e.target.value })}
-                        required
+                        maxLength={100}
                       />
                     </div>
+                    {signupErrors.name && (
+                      <p className="text-sm text-destructive">{signupErrors.name}</p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -172,12 +209,15 @@ const Auth = () => {
                         id="signup-email"
                         type="email"
                         placeholder="you@example.com"
-                        className="pl-10"
+                        className={`pl-10 ${signupErrors.email ? "border-destructive" : ""}`}
                         value={signupData.email}
                         onChange={(e) => setSignupData({ ...signupData, email: e.target.value })}
-                        required
+                        maxLength={255}
                       />
                     </div>
+                    {signupErrors.email && (
+                      <p className="text-sm text-destructive">{signupErrors.email}</p>
+                    )}
                   </div>
                   
                   <div className="space-y-2">
@@ -188,12 +228,18 @@ const Auth = () => {
                         id="signup-password"
                         type="password"
                         placeholder="••••••••"
-                        className="pl-10"
+                        className={`pl-10 ${signupErrors.password ? "border-destructive" : ""}`}
                         value={signupData.password}
                         onChange={(e) => setSignupData({ ...signupData, password: e.target.value })}
-                        required
+                        maxLength={128}
                       />
                     </div>
+                    {signupErrors.password && (
+                      <p className="text-sm text-destructive">{signupErrors.password}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground">
+                      Must be 8+ characters with uppercase, lowercase, and number
+                    </p>
                   </div>
                   
                   <div className="space-y-2">
@@ -204,12 +250,15 @@ const Auth = () => {
                         id="signup-confirm"
                         type="password"
                         placeholder="••••••••"
-                        className="pl-10"
+                        className={`pl-10 ${signupErrors.confirmPassword ? "border-destructive" : ""}`}
                         value={signupData.confirmPassword}
                         onChange={(e) => setSignupData({ ...signupData, confirmPassword: e.target.value })}
-                        required
+                        maxLength={128}
                       />
                     </div>
+                    {signupErrors.confirmPassword && (
+                      <p className="text-sm text-destructive">{signupErrors.confirmPassword}</p>
+                    )}
                   </div>
                   
                   <Button
