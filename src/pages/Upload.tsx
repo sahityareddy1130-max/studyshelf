@@ -15,6 +15,7 @@ import {
   Image
 } from "lucide-react";
 import { toast } from "sonner";
+import { uploadSchema, validatePdfFile, validateImageFile, type UploadFormData } from "@/lib/validation";
 
 const categories = [
   "Engineering",
@@ -28,7 +29,7 @@ const categories = [
 ];
 
 const Upload = () => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<UploadFormData>({
     title: "",
     author: "",
     category: "",
@@ -36,8 +37,11 @@ const Upload = () => {
     description: "",
     pages: "",
   });
+  const [formErrors, setFormErrors] = useState<Partial<Record<keyof UploadFormData, string>>>({});
   const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfError, setPdfError] = useState<string>("");
   const [coverImage, setCoverImage] = useState<File | null>(null);
+  const [coverError, setCoverError] = useState<string>("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleInputChange = (
@@ -45,37 +49,81 @@ const Upload = () => {
   ) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
+    // Clear error when user starts typing
+    if (formErrors[name as keyof UploadFormData]) {
+      setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handlePdfChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === "application/pdf") {
-      setPdfFile(file);
-    } else {
-      toast.error("Please upload a valid PDF file");
+    const file = e.target.files?.[0] || null;
+    setPdfError("");
+    
+    const validation = validatePdfFile(file);
+    if (!validation.valid && validation.error) {
+      setPdfError(validation.error);
+      setPdfFile(null);
+      toast.error(validation.error);
+      return;
     }
+    
+    setPdfFile(file);
   };
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type.startsWith("image/")) {
-      setCoverImage(file);
-    } else {
-      toast.error("Please upload a valid image file");
+    const file = e.target.files?.[0] || null;
+    setCoverError("");
+    
+    const validation = validateImageFile(file);
+    if (!validation.valid && validation.error) {
+      setCoverError(validation.error);
+      setCoverImage(null);
+      toast.error(validation.error);
+      return;
     }
+    
+    setCoverImage(file);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormErrors({});
+    setPdfError("");
+    setCoverError("");
     
-    if (!pdfFile) {
-      toast.error("Please upload a PDF file");
+    // Validate form data with zod
+    const result = uploadSchema.safeParse(formData);
+    
+    if (!result.success) {
+      const errors: Partial<Record<keyof UploadFormData, string>> = {};
+      result.error.errors.forEach((err) => {
+        const field = err.path[0] as keyof UploadFormData;
+        errors[field] = err.message;
+      });
+      setFormErrors(errors);
+      toast.error("Please fix the form errors");
+      return;
+    }
+    
+    // Validate PDF file
+    const pdfValidation = validatePdfFile(pdfFile);
+    if (!pdfValidation.valid) {
+      setPdfError(pdfValidation.error || "PDF file is required");
+      toast.error(pdfValidation.error || "PDF file is required");
+      return;
+    }
+    
+    // Validate cover image (optional but must be valid if provided)
+    const coverValidation = validateImageFile(coverImage);
+    if (!coverValidation.valid) {
+      setCoverError(coverValidation.error || "Invalid cover image");
+      toast.error(coverValidation.error || "Invalid cover image");
       return;
     }
 
     setIsSubmitting(true);
     
-    // Simulate upload
+    // Simulate upload (would be replaced with actual backend call)
     setTimeout(() => {
       toast.success("Your book has been uploaded successfully!");
       setIsSubmitting(false);
@@ -158,8 +206,12 @@ const Upload = () => {
                     value={formData.title}
                     onChange={handleInputChange}
                     placeholder="e.g., Data Structures Complete Notes"
-                    required
+                    className={formErrors.title ? "border-destructive" : ""}
+                    maxLength={200}
                   />
+                  {formErrors.title && (
+                    <p className="text-sm text-destructive">{formErrors.title}</p>
+                  )}
                 </div>
                 
                 {/* Author */}
@@ -171,7 +223,12 @@ const Upload = () => {
                     value={formData.author}
                     onChange={handleInputChange}
                     placeholder="e.g., Prof. Sharma or Self-made"
+                    className={formErrors.author ? "border-destructive" : ""}
+                    maxLength={100}
                   />
+                  {formErrors.author && (
+                    <p className="text-sm text-destructive">{formErrors.author}</p>
+                  )}
                 </div>
                 
                 {/* Category & Price */}
@@ -183,14 +240,16 @@ const Upload = () => {
                       name="category"
                       value={formData.category}
                       onChange={handleInputChange}
-                      className="w-full h-10 rounded-lg border border-input bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring"
-                      required
+                      className={`w-full h-10 rounded-lg border ${formErrors.category ? "border-destructive" : "border-input"} bg-background px-3 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring`}
                     >
                       <option value="">Select category</option>
                       {categories.map((cat) => (
                         <option key={cat} value={cat}>{cat}</option>
                       ))}
                     </select>
+                    {formErrors.category && (
+                      <p className="text-sm text-destructive">{formErrors.category}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="price">Price (₹) *</Label>
@@ -201,13 +260,16 @@ const Upload = () => {
                         name="price"
                         type="number"
                         min="0"
+                        max="10000"
                         value={formData.price}
                         onChange={handleInputChange}
                         placeholder="49"
-                        className="pl-8"
-                        required
+                        className={`pl-8 ${formErrors.price ? "border-destructive" : ""}`}
                       />
                     </div>
+                    {formErrors.price && (
+                      <p className="text-sm text-destructive">{formErrors.price}</p>
+                    )}
                   </div>
                 </div>
                 
@@ -219,10 +281,15 @@ const Upload = () => {
                     name="pages"
                     type="number"
                     min="1"
+                    max="10000"
                     value={formData.pages}
                     onChange={handleInputChange}
                     placeholder="e.g., 150"
+                    className={formErrors.pages ? "border-destructive" : ""}
                   />
+                  {formErrors.pages && (
+                    <p className="text-sm text-destructive">{formErrors.pages}</p>
+                  )}
                 </div>
                 
                 {/* Description */}
@@ -235,16 +302,23 @@ const Upload = () => {
                     onChange={handleInputChange}
                     placeholder="Describe what's included in your study material..."
                     rows={4}
-                    required
+                    className={formErrors.description ? "border-destructive" : ""}
+                    maxLength={2000}
                   />
+                  {formErrors.description && (
+                    <p className="text-sm text-destructive">{formErrors.description}</p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    {formData.description.length}/2000 characters (minimum 20)
+                  </p>
                 </div>
                 
                 {/* File Uploads */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* PDF Upload */}
                   <div className="space-y-2">
-                    <Label>PDF File *</Label>
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition-colors bg-muted/30">
+                    <Label>PDF File * (max 50MB)</Label>
+                    <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed ${pdfError ? "border-destructive" : "border-border"} rounded-lg cursor-pointer hover:border-primary transition-colors bg-muted/30`}>
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         {pdfFile ? (
                           <>
@@ -265,17 +339,20 @@ const Upload = () => {
                       </div>
                       <input
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,application/pdf"
                         className="hidden"
                         onChange={handlePdfChange}
                       />
                     </label>
+                    {pdfError && (
+                      <p className="text-sm text-destructive">{pdfError}</p>
+                    )}
                   </div>
                   
                   {/* Cover Image Upload */}
                   <div className="space-y-2">
-                    <Label>Cover Image (optional)</Label>
-                    <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer hover:border-primary transition-colors bg-muted/30">
+                    <Label>Cover Image (optional, max 5MB)</Label>
+                    <label className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed ${coverError ? "border-destructive" : "border-border"} rounded-lg cursor-pointer hover:border-primary transition-colors bg-muted/30`}>
                       <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         {coverImage ? (
                           <>
@@ -293,11 +370,14 @@ const Upload = () => {
                       </div>
                       <input
                         type="file"
-                        accept="image/*"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
                         className="hidden"
                         onChange={handleCoverChange}
                       />
                     </label>
+                    {coverError && (
+                      <p className="text-sm text-destructive">{coverError}</p>
+                    )}
                   </div>
                 </div>
                 
